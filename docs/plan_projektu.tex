@@ -1,0 +1,259 @@
+\documentclass[11pt,a4paper]{article}
+
+% Polskie znaki i kodowanie
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[polish]{babel}
+\usepackage{geometry}
+\geometry{top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+
+% Pakiety graficzne, tabelaryczne i formatowania
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{listings}
+\usepackage{amsmath}
+\usepackage{fancyhdr}
+
+% Konfiguracja nagłówków i stopek
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Projekt: Gra w Statki (C)}
+\fancyhead[R]{\small Plan Działania i Architektura}
+\fancyfoot[C]{\thepage}
+
+% Styl linków i nagłówków
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!70!black,
+    citecolor=blue!70!black,
+    urlcolor=blue!70!black
+}
+
+\titleformat{\section}{\large\bfseries\color{blue!60!black}}{\thesection.}{0.8em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{black!85}}{\thesubsection.}{0.6em}{}
+\titleformat{\subsubsection}{\small\bfseries\color{black!70}}{\thesubsubsection.}{0.5em}{}
+
+% Konfiguracja listingu kodu
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{teal},
+    backgroundcolor=\color{black!3},
+    frame=single,
+    rulecolor=\color{black!15},
+    breaklines=true,
+    captionpos=b,
+    showstringspaces=false
+}
+
+\title{
+    \vspace{-1.5cm}
+    \textbf{\huge Gra w Statki (Battleship) w języku C}\\[0.3cm]
+    \large Kompleksowy Plan Działania, Architektura Sieciowa LAN oraz Harmonogram Wdrożenia
+}
+\author{\textbf{Dokumentacja Inżynierska Projektu}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+Niniejszy dokument przedstawia szczegółowy plan projektowy oraz architekturę oprogramowania dla aplikacji klasycznej gry w ,,Statki'' (Battleship), zrealizowanej w standardzie języka C (C11). Projekt uwzględnia modularną konstrukcję, wsparcie dla rozgrywki wieloosobowej w sieci lokalnej (LAN) oraz na dwóch terminalach (\texttt{localhost}), zaawansowany moduł sztucznej inteligencji (AI), pełną parametryzację planszy oraz floty statków, a także interfejs użytkownika z możliwością łatwej rozbudowy.
+\end{abstract}
+
+\tableofcontents
+\vspace{0.5cm}
+\hrule
+\vspace{0.5cm}
+
+\section{Wprowadzenie i Założenia Projektowe}
+\subsection{Opis Koncepcji}
+Celem projektu jest stworzenie elastycznej, modularnej gry strategicznej w języku C, która zachowuje tradycyjne reguły morskiej bitwy, wprowadzając nowoczesne elementy architektury oprogramowania: elastyczną konfigurację, komunikację międzyprocesową przez gniazda TCP oraz algorytmy sztucznej inteligencji.
+
+\subsection{Główne Wymagania Funkcjonalne}
+\begin{enumerate}[noitemsep]
+    \item \textbf{Tryb Singleplayer (vs AI):} Rozgrywka z komputerem o zróżnicowanych strategiach (strzały losowe, algorytm \textit{Hunt \& Target}, wyszukiwanie oparte na parzystości pól).
+    \item \textbf{Tryb Multiplayer (LAN / 2 terminale):}
+    \begin{itemize}[noitemsep]
+        \item Gra na dwóch niezależnych komputerach podłączonych do wspólnej sieci LAN.
+        \item Gra między dwoma oknami terminala na tym samym komputerze przy wykorzystaniu interfejsu pętli zwrotnej (\texttt{127.0.0.1}).
+    \end{itemize}
+    \item \textbf{Menu Główne i GUI/TUI:} Interaktywne menu umożliwiające wybór trybu rozgrywki, dostosowanie parametrów oraz czytelny podgląd stanu własnej planszy i radaru trafień wroga.
+    \item \textbf{Pełna Konfigurowalność Rozgrywki:}
+    \begin{itemize}[noitemsep]
+        \item Dynamiczny dobór wielkości planszy (np. od $6\times6$ do $20\times20$; domyślnie $10\times10$).
+        \item Możliwość definiowania liczebności floty oraz rozmiaru poszczególnych jednostek (np. jednomasztowce, dwumasztowce, trójmasztowce, czteromasztowce).
+    \end{itemize}
+    \item \textbf{Elastyczność Architektury:} Możliwość wprowadzania zmian i rozszerzeń w toku projektu (np. zmiana mechanizmu wyświetlania z TUI ANSI na bibliotekę graficzną Raylib/SDL, dodanie zapisu stanu gry do pliku).
+\end{enumerate}
+
+\section{Architektura Systemu i Podział Modularny}
+Aby spełnić wymóg adaptacyjności kodu, zastosowano architekturę warstwową inspirowaną wzorcem MVC (Model-View-Controller) z wyraźnym odseparowaniem logiki biznesowej od operacji wejścia/wyjścia oraz warstwy transportowej.
+
+\begin{table}[h!]
+\centering
+\small
+\begin{tabularx}{\textwidth}{l p{4.0cm} X}
+\toprule
+\textbf{Moduł} & \textbf{Pliki źródłowe} & \textbf{Zakres odpowiedzialności} \\
+\midrule
+\textbf{Config} & \texttt{include/config.h} & Globalne stałe, limity, domyślne parametry planszy i floty statków. \\
+\addlinespace[2pt]
+\textbf{Game Logic} & \texttt{include/game.h} \newline \texttt{src/game.c} & Dynamiczne tworzenie i niszczenie planszy, walidacja reguł rozstawiania statków, rejestracja strzałów, sprawdzanie warunku zwycięstwa. \\
+\addlinespace[2pt]
+\textbf{Network} & \texttt{include/network.h} \newline \texttt{src/network.c} & Abstrakcja gniazd TCP (cross-platform: Windows Winsock2 / Linux POSIX Sockets), nawiązywanie połączeń, wysyłanie i odbiór pakietów. \\
+\addlinespace[2pt]
+\textbf{Protocol} & \texttt{include/protocol.h} \newline \texttt{src/protocol.c} & Serializacja i deserializacja komunikatów sieciowych (uzgadnianie parametrów gry, koordynaty strzałów, wyniki). \\
+\addlinespace[2pt]
+\textbf{AI} & \texttt{include/ai.h} \newline \texttt{src/ai.c} & Procedury automatycznego rozstawiania statków oraz silnik generowania ruchów bota (Hunt \& Target). \\
+\addlinespace[2pt]
+\textbf{UI / TUI} & \texttt{include/ui.h} \newline \texttt{src/ui.c} & Prezentacja menu, renderowanie plansz obok siebie z kolorystyką ANSI, obsługa wprowadzania współrzędnych. \\
+\addlinespace[2pt]
+\textbf{Controller} & \texttt{src/main.c} & Pętla główna, maszyna stanów gry, orkiestracja przepływu danych pomiędzy modułami. \\
+\bottomrule
+\end{tabularx}
+\caption{Podział modularny projektu gry w Statki}
+\end{table}
+
+\section{Kluczowe Struktury Danych}
+Wszystkie tablice planszy alokowane są dynamicznie w stercie, co zapewnia brak sztywnych ograniczeń kompilacyjnych:
+
+\begin{lstlisting}[language=C, caption={Podstawowe struktury silnika gry (game.h)}]
+typedef enum {
+    CELL_EMPTY = 0, // Woda / puste pole
+    CELL_SHIP,      // Segment statku (ukryty przed wrogiem)
+    CELL_MISS,      // Pudlo (strzal w wode)
+    CELL_HIT,       // Trafiony segment statku
+    CELL_SUNK       // Segment zatopionego statku
+} CellState;
+
+typedef struct {
+    int id;             // Identyfikator statku
+    int x, y;           // Pozycja dziobu
+    int size;           // Dlugosc jednostki
+    Direction dir;      // DIR_HORIZONTAL lub DIR_VERTICAL
+    int hits_left;      // Licznik nieuszkodzonych pol
+    bool is_sunk;       // Flaga zatopienia
+} Ship;
+
+typedef struct {
+    int width, height;  // Dynamiczne wymiary planszy
+    CellState **grid;   // Dynamiczna macierz pol [height][width]
+    int **ship_ids;     // Odwzorowanie pola na ID statku
+    Ship *ships;        // Tablica statkow gracza
+    int ship_count;     // Calkowita liczba statkow
+    int ships_alive;    // Liczba statkow plywajacych
+} Board;
+\end{lstlisting}
+
+\section{Komunikacja Sieciowa i Protokół LAN}
+\subsection{Topologia Połączenia}
+Rozgrywka sieciowa wykorzystuje protokół \textbf{TCP/IP}. 
+\begin{itemize}[noitemsep]
+    \item \textbf{Gracz 1 (Host):} Inicjuje gniazdo serwerowe (\texttt{net\_listen}) na ustalonym porcie (domyślnie \texttt{5555}) i oczekuje na połączenie.
+    \item \textbf{Gracz 2 (Klient):} Nawiązuje połączenie (\texttt{net\_connect}), podając adres IP serwera (np. \texttt{192.168.1.15} dla sieci LAN lub \texttt{127.0.0.1} dla gry na dwóch terminalach tego samego komputera).
+\end{itemize}
+
+\subsection{Przebieg Wymiany Danych (Handshake i Tury)}
+Protokół wymiany opiera się na czytelnych ramkach tekstowych zakończonych znakiem nowej linii \texttt{\textbackslash n}:
+
+\begin{enumerate}
+    \item \textbf{Faza Negocjacji (Handshake):}
+    \begin{itemize}[noitemsep]
+        \item \texttt{Host $\rightarrow$ Klient: CONFIG <szerokość> <wysokość> <liczba\_statków> <s1> <s2> ...}
+        \item \texttt{Klient $\rightarrow$ Host: CONFIG\_ACK}
+    \end{itemize}
+    \item \textbf{Faza Gotowości:}
+    Obaj gracze rozstawiają statki (ręcznie lub automatycznie). Po zakończeniu każdy wysyła:
+    \begin{itemize}[noitemsep]
+        \item \texttt{Gracz $\rightarrow$ Rywal: READY}
+    \end{itemize}
+    \item \textbf{Faza Rozgrywki (Naprzemienne tury):}
+    \begin{itemize}[noitemsep]
+        \item \texttt{Gracz A $\rightarrow$ Gracz B: SHOT <x> <y>}
+        \item Gracz B weryfikuje strzał na swojej planszy i odpowiada:
+        \item \texttt{Gracz B $\rightarrow$ Gracz A: RESULT <x> <y> <KOD>} (gdzie \texttt{KOD} to: \texttt{MISS}, \texttt{HIT}, \texttt{SUNK} lub \texttt{WIN}).
+        \item Jeżeli nastąpiło pudło, tura przechodzi na drugiego gracza; przy trafieniu gracz kontynuuje ruch.
+    \end{itemize}
+    \item \textbf{Zakończenie Gry:}
+    Komunikat \texttt{WIN} lub rezygnacja gracza (\texttt{QUIT}).
+\end{enumerate}
+
+\section{Algorytm Sztucznej Inteligencji (AI)}
+Dla trybu jednoosobowego zaimplementowano algorytm działający w dwóch stanach:
+\begin{enumerate}
+    \item \textbf{Faza Poszukiwania (Hunt Mode):} Bot oddaje strzały w pola o parzystej sumie współrzędnych $(x + y) \pmod 2 = 0$ (heurystyka szachownicy). Ponieważ najmniejszy wielomasztowiec ma rozmiar $\ge 2$, ta taktyka pozwala na dwukrotne przyspieszenie wykrycia pierwszego segmentu statku.
+    \item \textbf{Faza Niszczenia (Target Mode):} Po zarejestrowaniu trafienia (\texttt{HIT}) bot wstrzymuje losowe strzały i bada 4 sąsiadujące pola (góra, prawo, dół, lewo). Po kolejnym trafieniu ustala oś statku (pozioma/pionowa) i kontynuuje ostrzał wzdłuż tej osi aż do otrzymania komunikatu \texttt{SUNK}.
+\end{enumerate}
+
+\section{Harmonogram Realizacji (Kroki Implementacji)}
+Projekt został rozłożony na pięć powiązanych etapów:
+
+\subsection*{Etap 1: Silnik Podstawowy i Mechanika Gry}
+\begin{itemize}[noitemsep]
+    \item Implementacja dynamicznej alokacji i zwalniania struktur \texttt{Board} i \texttt{Ship}.
+    \item Algorytm walidacji pozycji statku (brak kolizji i brak stykania się rogami ani burtami).
+    \item Mechanizm obsługi strzału, aktualizacji stanu segmentów i wykrywania zatopienia całej floty.
+\end{itemize}
+
+\subsection*{Etap 2: Interfejs Użytkownika (TUI) i Formularz Konfiguracji}
+\begin{itemize}[noitemsep]
+    \item Ekran Menu Głównego oraz podmenu Ustawień (konfiguracja rozmiaru planszy i floty).
+    \item Rysowanie podwójnej planszy w konsoli (plansza własna ze statkami + plansza trafień).
+    \item Parsowanie wejścia użytkownika (obsługa notacji szachowej np. \texttt{A5} oraz liczbowej \texttt{1 5}).
+\end{itemize}
+
+\subsection*{Etap 3: Logika Sztucznej Inteligencji (AI)}
+\begin{itemize}[noitemsep]
+    \item Generator automatycznego, bezkolizyjnego rozstawiania losowej floty statków.
+    \item Implementacja maszyny stanów bota (\textit{Hunt \& Target}).
+    \item Pętla rozgrywki w trybie \textit{Singleplayer} przeciwko komputerowi.
+\end{itemize}
+
+\subsection*{Etap 4: Moduł Sieciowy i Tryb Wieloosobowy (LAN / 2 Terminale)}
+\begin{itemize}[noitemsep]
+    \item Implementacja warstwy gniazd TCP z obsługą wieloplatformowości (Winsock / POSIX).
+    \item Wdrożenie serializacji i deserializacji protokołu sieciowego.
+    \item Integracja maszyny stanów dla ról Hosta i Klienta, obsługa timeoutów i rozłączeń.
+    \item Testy rozgrywki między dwoma oknami terminala oraz w fizycznej sieci LAN.
+\end{itemize}
+
+\subsection*{Etap 5: Rozszerzenia, Obsługa Zmian i Ostateczny Szlif}
+\begin{itemize}[noitemsep]
+    \item Możliwość podpięcia alternatywnego widoku (np. okienkowego GUI opartego o Raylib lub SDL).
+    \item Zabezpieczenie przed wyciekami pamięci (weryfikacja narzędziami Valgrind / Dr. Memory).
+    \item Testy scenariuszy brzegowych (błędne pakiety, zerwanie łącza).
+\end{itemize}
+
+\section{Zarządzanie Zmianami w Projekcie}
+W toku realizacji wymagania mogą ulegać zmianie. Architektura została przygotowana na następujące modyfikacje:
+\begin{itemize}[noitemsep]
+    \item \textbf{Zmiana biblioteki interfejsu:} Dzięki odseparowaniu \texttt{ui.h} od \texttt{game.h}, zastąpienie terminala interfejsem graficznym nie wymaga żadnych modyfikacji w silniku gry ani w module sieciowym.
+    \item \textbf{Nowe typy statków / specjalne zdolności:} Struktura \texttt{Ship} zawiera identyfikator oraz elastyczne pole długości, co pozwala łatwo dodać np. miny morskie czy samoloty zwiadowcze.
+    \item \textbf{Rozbudowa protokołu sieciowego:} Protokół tekstowy umożliwia bezproblemowe dołożenie nowych komend, np. \texttt{CHAT <tekst>} czy \texttt{PAUSE}.
+\end{itemize}
+
+\section{Podsumowanie i Instrukcja Kompilacji}
+Projekt posiada gotowe konfiguracje dla dwóch najpopularniejszych narzędzi budowania:
+\begin{itemize}
+    \item \textbf{CMake:}
+    \begin{lstlisting}[language=bash]
+mkdir build && cd build
+cmake ..
+cmake --build .
+    \end{lstlisting}
+    \item \textbf{GNU Make (GCC / MinGW):}
+    \begin{lstlisting}[language=bash]
+make
+./statki.exe  # (lub ./statki na systemach Linux/macOS)
+    \end{lstlisting}
+\end{itemize}
+
+\end{document}

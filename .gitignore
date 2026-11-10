@@ -1,0 +1,12 @@
+# Pliki binarne i obiekty
+*.exe
+*.o
+*.obj
+build/
+bin/
+
+# Śmieci edytorów
+.vscode/
+.idea/
+*.swp
+*~
